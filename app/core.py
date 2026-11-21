@@ -8,7 +8,9 @@ import traceback
 import yt_dlp
 
 APP_NAME = "MeyDownloader"
-VERSION = "1.1.1"
+VERSION = "1.2.0"
+OWNER = "Kamil"
+COPYRIGHT = "© 2026 Kamil. All rights reserved."
 IS_ANDROID = "ANDROID_ARGUMENT" in os.environ or "ANDROID_PRIVATE" in os.environ
 MP3_QUALITIES = ["320", "192", "128"]
 BEST = "Best available"

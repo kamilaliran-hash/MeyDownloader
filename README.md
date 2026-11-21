@@ -1,5 +1,7 @@
 # MeyDownloader
 
+**Owner / Developer:** Kamil  ·  © 2026 Kamil. All rights reserved.
+
 Download video as **MP4** at any available resolution, or audio as **MP3** at 128, 192 or 320 kbps, from:
 
 **YouTube · Facebook · X/Twitter · Instagram · TikTok · Reddit · Vimeo · Threads · Dailymotion · SoundCloud · Twitch · Bilibili · Pinterest · LinkedIn**, plus 1000+ other sites supported by yt-dlp.
@@ -19,13 +21,20 @@ One Kivy codebase runs on Windows and Android.
 1. Push this folder to the `main` branch of a GitHub repo.
 2. Open the **Actions** tab and wait for "Build MeyDownloader" to finish.
 3. Download the artifacts:
-   - `windows`: `MeyDownloader.exe` (portable) and `MeyDownloader-Setup.exe` (installer)
-   - `android`: `meydownloader-1.1.1-arm64-v8a-debug.apk`
-4. To publish a GitHub Release, run `git tag v1.1.1 && git push --tags`.
+   - `windows`: `MeyDownloader.exe` (portable, single file) and `MeyDownloader-Setup.exe` (installer, recommended because it starts faster)
+   - `android`: `meydownloader-1.2.0-arm64-v8a-debug.apk`
+4. To publish a GitHub Release, run `git tag v1.2.0 && git push --tags`.
 
 ## Build locally
 - **Windows:** install Python 3.11 (64-bit) and Inno Setup 6, then run `windows\build_windows.bat`.
 - **Android (Linux/WSL):** see the `android` job in `.github/workflows/build.yml`, then run `buildozer android debug`.
+
+## App size
+- **Slim ffmpeg** (`tools/build_ffmpeg_slim.sh`): the app only converts audio to MP3 and copies video streams into MP4 (it never re-encodes video). So ffmpeg is built with just those parts, making it about 3–6 MB instead of about 80–130 MB, with the same speed.
+- **The installer uses folder mode**, so the app no longer unpacks itself to a temp folder on every launch. Startup is faster than with the single-file exe.
+- **Unused Python and Kivy modules are excluded**, and the installer uses maximum LZMA compression.
+- **No UPX packing.** It saves little and often triggers antivirus false alarms.
+- If a site ever fails because a codec is missing, rerun the workflow from the Actions tab with **ffmpeg = full**.
 
 ## Logo
 The `assets/` folder holds `icon.png` (1024 px), `icon512.png`, `icon.ico` and `presplash.png`.

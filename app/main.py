@@ -91,6 +91,12 @@ BoxLayout:
                 halign: "left"
                 valign: "top"
                 text_size: self.size
+        Btn:
+            text: "About"
+            size_hint: None, None
+            size: dp(64), dp(38)
+            pos_hint: {"center_y": .5}
+            on_release: app.show_about()
 
     BoxLayout:
         size_hint_y: None
@@ -225,6 +231,34 @@ BoxLayout:
         halign: "center"
         color: 0.72, 0.7, 0.8, 1
     Widget:
+    Label:
+        text: app.footer
+        size_hint_y: None
+        height: dp(20)
+        font_size: "11sp"
+        color: 0.5, 0.47, 0.6, 1
+"""
+
+ABOUT = """
+#:import dp kivy.metrics.dp
+BoxLayout:
+    orientation: "vertical"
+    padding: dp(16)
+    spacing: dp(10)
+    Image:
+        source: app.logo
+        size_hint_y: None
+        height: dp(88)
+        fit_mode: "contain"
+    Label:
+        text: app.about_text
+        markup: True
+        halign: "center"
+        valign: "middle"
+        text_size: self.width, None
+        size_hint_y: None
+        height: self.texture_size[1] + dp(8)
+    Widget:
 """
 
 
@@ -233,6 +267,15 @@ class MeyDownloaderApp(App):
     icon = os.path.join(HERE, "logo.png")
     logo = os.path.join(HERE, "logo.png")
     cookie_browsers = core.COOKIE_BROWSERS
+    footer = f"v{core.VERSION}  ·  Owner: {core.OWNER}  ·  © 2026 {core.OWNER}"
+    about_text = (
+        f"[size=22sp][b]MeyDownloader[/b][/size]\nVersion {core.VERSION}\n\n"
+        f"[b]Owner / Developer:[/b] {core.OWNER}\n{core.COPYRIGHT}\n\n"
+        "Download video (MP4) or audio (MP3) from YouTube, Facebook,\n"
+        "X/Twitter, Instagram, TikTok and 1000+ other sites.\n\n"
+        "[size=12sp]Powered by yt-dlp and FFmpeg.\n"
+        "Only download content you own or have permission to use.[/size]"
+    )
 
     def build(self):
         if not core.IS_ANDROID:
@@ -324,6 +367,12 @@ class MeyDownloaderApp(App):
             self.ids.choice_lbl.text = "Resolution"
             self.ids.choice.values = self.resolutions
             self.ids.choice.text = self.resolutions[0] if self.resolutions else "Fetch info first"
+
+    def show_about(self):
+        from kivy.uix.popup import Popup
+        Popup(title="About", content=Builder.load_string(ABOUT),
+              size_hint=(0.9, None), height=dp(470),
+              separator_color=(0.925, 0.282, 0.6, 1)).open()
 
     # ------------------------------------------------------------ actions
     def fetch(self):

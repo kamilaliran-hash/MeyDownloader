@@ -5,44 +5,93 @@ on:
     branches: [main]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      ffmpeg:
+        description: "ffmpeg flavor (slim = small, full = every codec)"
+        default: slim
+        type: choice
+        options: [slim, full]
+
+env:
+  FFMPEG_FLAVOR: ${{ inputs.ffmpeg || 'slim' }}
 
 jobs:
+  # ---------------------------------------------------------------- slim ffmpeg for Windows
+  ffmpeg-windows:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: ffout
+          key: ffmpeg-win-${{ env.FFMPEG_FLAVOR }}-${{ hashFiles('tools/build_ffmpeg_slim.sh') }}
+      - if: env.FFMPEG_FLAVOR == 'slim' && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update && sudo apt-get install -y mingw-w64 nasm
+          tools/build_ffmpeg_slim.sh windows ffout
+      - if: env.FFMPEG_FLAVOR == 'full'
+        run: |
+          rm -rf ffout && mkdir ffout
+          curl -fsSL https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -o ff.zip
+          unzip -q ff.zip && cp ffmpeg-*/bin/ffmpeg.exe ffmpeg-*/bin/ffprobe.exe ffout/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: ffout/*.exe
+
+  # ---------------------------------------------------------------- Windows exe + installer
   windows:
+    needs: ffmpeg-windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install Python deps
-        run: pip install -r requirements-desktop.txt
-      - name: Fetch ffmpeg + deno
+      - run: pip install -r requirements-desktop.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-windows
+          path: windows/bin
+      - name: Fetch deno
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force windows\bin | Out-Null
-          Invoke-WebRequest https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip -OutFile ff.zip
-          Expand-Archive ff.zip ffx -Force
-          Copy-Item ffx\*\bin\ffmpeg.exe, ffx\*\bin\ffprobe.exe windows\bin\
           Invoke-WebRequest https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip -OutFile deno.zip
           Expand-Archive deno.zip windows\bin -Force
-      - name: Build EXE
+      - name: Build app folder (for installer)
         timeout-minutes: 30
         env:
           KIVY_GL_BACKEND: angle_sdl2
           KIVY_NO_ARGS: "1"
         run: pyinstaller --noconfirm windows/meydownloader.spec
+      - name: Build portable single exe
+        shell: pwsh
+        timeout-minutes: 30
+        env:
+          KIVY_GL_BACKEND: angle_sdl2
+          KIVY_NO_ARGS: "1"
+        run: |
+          $env:MD_ONEFILE = "1"
+          pyinstaller --noconfirm --workpath build-onefile --distpath dist-portable windows/meydownloader.spec
       - name: Build installer
         shell: pwsh
         run: |
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows\installer.iss
+      - name: Report sizes
+        shell: pwsh
+        run: |
+          Get-ChildItem windows\bin, dist-portable, Output | Where-Object { -not $_.PSIsContainer } |
+            Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
       - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: |
-            dist/MeyDownloader.exe
+            dist-portable/MeyDownloader.exe
             Output/MeyDownloader-Setup.exe
 
+  # ---------------------------------------------------------------- Android APK
   android:
     runs-on: ubuntu-22.04
     steps:
@@ -58,19 +107,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git zip unzip autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev xz-utils
+            zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev xz-utils nasm
           pip install buildozer "cython==0.29.37"
-      - name: Fetch static arm64 ffmpeg + QuickJS
+      - id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: ffout
+          key: ffmpeg-android-${{ env.FFMPEG_FLAVOR }}-${{ hashFiles('tools/build_ffmpeg_slim.sh') }}
+      - name: ffmpeg (slim, built with the Android NDK)
+        if: env.FFMPEG_FLAVOR == 'slim' && steps.ffcache.outputs.cache-hit != 'true'
+        run: ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME tools/build_ffmpeg_slim.sh android ffout
+      - name: ffmpeg (full static)
+        if: env.FFMPEG_FLAVOR == 'full' && steps.ffcache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ffout
+          curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz | tar -xJ
+          cp ffmpeg-*-arm64-static/ffmpeg ffout/libffmpeg.so
+      - name: Native libs (ffmpeg + QuickJS)
         run: |
           mkdir -p android_libs/arm64-v8a
-          curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz -o ff.tar.xz
-          tar -xf ff.tar.xz
-          cp ffmpeg-*-arm64-static/ffmpeg android_libs/arm64-v8a/libffmpeg.so
-          curl -L https://github.com/quickjs-ng/quickjs/releases/latest/download/qjs-linux-aarch64 \
+          cp ffout/libffmpeg.so android_libs/arm64-v8a/
+          curl -fL https://github.com/quickjs-ng/quickjs/releases/latest/download/qjs-linux-aarch64 \
             -o android_libs/arm64-v8a/libqjs.so || echo "::warning::QuickJS download failed"
           chmod +x android_libs/arm64-v8a/*.so
-      - name: Cache buildozer
-        uses: actions/cache@v4
+          ls -lh android_libs/arm64-v8a
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
@@ -80,6 +141,7 @@ jobs:
         run: |
           set +o pipefail
           yes | buildozer android debug
+      - run: ls -lh bin/
       - uses: actions/upload-artifact@v4
         with:
           name: android
@@ -96,6 +158,6 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            windows/dist/MeyDownloader.exe
+            windows/dist-portable/MeyDownloader.exe
             windows/Output/MeyDownloader-Setup.exe
             android/*.apk
