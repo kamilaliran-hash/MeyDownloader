@@ -1,7 +1,31 @@
 """MeyDownloader - download video (MP4) or audio (MP3) from YouTube, Facebook,
 X/Twitter, Instagram, TikTok and 1000+ other sites. Kivy UI for Windows and Android."""
 import os
+import sys
 import threading
+
+
+class _NullStream:
+    """The windowed .exe has no console: give Python harmless stdout/stderr."""
+    encoding = "utf-8"
+
+    def write(self, s):
+        return len(s) if isinstance(s, str) else 0
+
+    def flush(self):
+        pass
+
+    def isatty(self):
+        return False
+
+    def fileno(self):
+        import io
+        raise io.UnsupportedOperation("no console")
+
+
+for _name in ("stdout", "stderr"):
+    if not hasattr(getattr(sys, _name, None), "write"):
+        setattr(sys, _name, _NullStream())
 
 from kivy.app import App
 from kivy.clock import mainthread
@@ -352,6 +376,7 @@ class MeyDownloaderApp(App):
             self._media_scan(path)
             self.status(f"Done! Saved to:\n{path}", 1)
         except Exception as e:
+            core.write_error_log() if "details:" not in str(e) else None
             self.status(f"Error: {e}")
         finally:
             self.busy(False)

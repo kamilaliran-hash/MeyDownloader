@@ -2,7 +2,7 @@
 ; Compile:  iscc windows\installer.iss   (after PyInstaller has produced dist\MeyDownloader.exe)
 
 #define AppName "MeyDownloader"
-#define AppVersion "1.1.0"
+#define AppVersion "1.1.1"
 
 [Setup]
 AppId={{3F7A2D91-6C4E-4E1B-A8D5-2B9C7E04F6A3}

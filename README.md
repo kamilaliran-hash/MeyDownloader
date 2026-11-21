@@ -20,8 +20,8 @@ One Kivy codebase runs on Windows and Android.
 2. Open the **Actions** tab and wait for "Build MeyDownloader" to finish.
 3. Download the artifacts:
    - `windows`: `MeyDownloader.exe` (portable) and `MeyDownloader-Setup.exe` (installer)
-   - `android`: `meydownloader-1.1.0-arm64-v8a-debug.apk`
-4. To publish a GitHub Release, run `git tag v1.1.0 && git push --tags`.
+   - `android`: `meydownloader-1.1.1-arm64-v8a-debug.apk`
+4. To publish a GitHub Release, run `git tag v1.1.1 && git push --tags`.
 
 ## Build locally
 - **Windows:** install Python 3.11 (64-bit) and Inno Setup 6, then run `windows\build_windows.bat`.

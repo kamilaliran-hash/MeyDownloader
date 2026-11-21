@@ -3,10 +3,12 @@ import os
 import re
 import sys
 import shutil
+import traceback
 
 import yt_dlp
 
 APP_NAME = "MeyDownloader"
+VERSION = "1.1.1"
 IS_ANDROID = "ANDROID_ARGUMENT" in os.environ or "ANDROID_PRIVATE" in os.environ
 MP3_QUALITIES = ["320", "192", "128"]
 BEST = "Best available"
@@ -28,6 +30,47 @@ PLATFORMS = [
     (r"bilibili\.", "Bilibili"),
     (r"linkedin\.com", "LinkedIn"),
 ]
+
+
+class _QuietLogger:
+    """Routes all yt-dlp output here so it never touches sys.stdout/stderr
+    (they don't exist in the windowed .exe, which caused "'str'/'NoneType'
+    object has no attribute 'write'")."""
+    def __init__(self):
+        self.lines = []
+
+    def _add(self, msg):
+        self.lines = (self.lines + [str(msg)])[-200:]
+
+    def debug(self, msg):
+        self._add(msg)
+
+    info = warning = debug
+
+    def error(self, msg):
+        self._add("ERROR: " + str(msg))
+
+
+def log_dir():
+    if IS_ANDROID:
+        return default_download_dir()
+    d = os.path.join(os.path.expanduser("~"), APP_NAME)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def write_error_log(logger=None):
+    """Save the full traceback + yt-dlp output; returns the log path."""
+    path = os.path.join(log_dir(), "error.log")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"{APP_NAME} {VERSION} / yt-dlp {yt_dlp.version.__version__}\n\n")
+            f.write(traceback.format_exc())
+            if logger and logger.lines:
+                f.write("\n--- yt-dlp output ---\n" + "\n".join(logger.lines))
+    except Exception:
+        pass
+    return path
 
 
 def detect_platform(url):
@@ -65,7 +108,15 @@ def cookies_file_path():
 
 def base_options(cookie_browser="None"):
     """yt-dlp options: bundled ffmpeg, JS runtime and optional login cookies."""
-    opts = {"quiet": True, "noplaylist": True, "no_warnings": True}
+    opts = {
+        "quiet": True,
+        "noplaylist": True,
+        "no_warnings": True,
+        "noprogress": True,          # progress comes from our hook, not the console
+        "consoletitle": False,
+        "no_color": True,
+        "logger": _QuietLogger(),
+    }
     if IS_ANDROID:
         d = _android_native_dir()
         ff, qjs = os.path.join(d, "libffmpeg.so"), os.path.join(d, "libqjs.so")
@@ -136,10 +187,12 @@ def _friendly_error(e, url):
 # ---------------------------------------------------------------- API
 def fetch_info(url, cookie_browser="None"):
     """Return dict: title, duration, site, resolutions[], has_video."""
+    opts = {**base_options(cookie_browser), "skip_download": True}
     try:
-        with yt_dlp.YoutubeDL({**base_options(cookie_browser), "skip_download": True}) as ydl:
+        with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as e:
+        write_error_log(opts["logger"])
         raise RuntimeError(_friendly_error(e, url)) from None
 
     if info.get("_type") == "playlist" and info.get("entries"):
@@ -231,7 +284,8 @@ def download(url, mode, choice, out_dir, progress_cb=None, cookie_browser="None"
                 info = next(iter(info["entries"]))
             path = result.get("path") or ydl.prepare_filename(info)
     except Exception as e:
-        raise RuntimeError(_friendly_error(e, url)) from None
+        log = write_error_log(opts["logger"])
+        raise RuntimeError(f"{_friendly_error(e, url)}\n(details: {log})") from None
 
     if mode == "mp3":
         path = os.path.splitext(path)[0] + ".mp3"
