@@ -1,0 +1,8 @@
+windows/bin/*.exe
+android_libs/arm64-v8a/*.so
+dist/
+build/
+Output/
+.buildozer/
+bin/
+__pycache__/
