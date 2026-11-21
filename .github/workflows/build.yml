@@ -26,6 +26,10 @@ jobs:
           Invoke-WebRequest https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip -OutFile deno.zip
           Expand-Archive deno.zip windows\bin -Force
       - name: Build EXE
+        timeout-minutes: 30
+        env:
+          KIVY_GL_BACKEND: angle_sdl2
+          KIVY_NO_ARGS: "1"
         run: pyinstaller --noconfirm windows/meydownloader.spec
       - name: Build installer
         shell: pwsh
