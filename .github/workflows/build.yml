@@ -108,7 +108,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git zip unzip autoconf automake libtool pkg-config \
             zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev xz-utils nasm
-          pip install buildozer "cython==0.29.37"
+          pip install "buildozer==1.5.0" "cython==0.29.37"
       - id: ffcache
         uses: actions/cache@v4
         with:
@@ -138,7 +138,7 @@ jobs:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-p4a2024-${{ hashFiles('buildozer.spec') }}
       - name: Build APK
         run: |
           set +o pipefail
@@ -148,6 +148,42 @@ jobs:
         with:
           name: android
           path: bin/*.apk
+
+  # ---------------------------------------------------------------- launch test on an emulator
+  # Installs the APK, opens it, and saves the Android log (logcat) so any
+  # start-up crash is visible in the "android-logcat" artifact.
+  android-smoke-test:
+    needs: android
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: android
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          script: |
+            adb install -r apk/*.apk
+            adb logcat -c
+            adb shell monkey -p com.meydownloader.meydownloader -c android.intent.category.LAUNCHER 1
+            sleep 45
+            adb logcat -d > logcat-full.txt
+            grep -E "python|AndroidRuntime|DEBUG|SDL|libc|FATAL|meydownloader" logcat-full.txt > logcat.txt || true
+            tail -n 150 logcat.txt
+            adb shell pidof com.meydownloader.meydownloader && echo "APP IS RUNNING" || (echo "::error::App is not running - see android-logcat artifact" && exit 1)
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-logcat
+          path: logcat*.txt
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

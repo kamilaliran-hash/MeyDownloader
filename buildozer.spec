@@ -4,7 +4,7 @@ package.name = meydownloader
 package.domain = com.meydownloader
 source.dir = app
 source.include_exts = py,png,jpg,kv
-version = 1.2.1
+version = 1.2.2
 
 requirements = python3,kivy==2.3.1,yt-dlp,yt-dlp-ejs,certifi,pyjnius,android,openssl
 
@@ -15,7 +15,7 @@ android.presplash_color = #110C1E
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET,(name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=28),(name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=32)
+android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 android.api = 34
 android.minapi = 24
 android.archs = arm64-v8a
@@ -28,7 +28,11 @@ android.manifest.intent_filters = android_intent_filters.xml
 # Static ffmpeg + QuickJS binaries packaged as "native libs" so Android lets us execute them
 android.add_libs_arm64_v8a = android_libs/arm64-v8a/*.so
 
+# Pinned toolchain: python-for-android 2024.01.21 = Python 3.11 + Cython 0.29,
+# the combination Kivy 2.3.1 is built and tested with. (The newer p4a release
+# defaults to Python 3.14, which crashes Kivy 2.3.1 instantly on start-up.)
 p4a.branch = v2024.01.21
+android.ndk = 25b
 
 [buildozer]
 log_level = 2
