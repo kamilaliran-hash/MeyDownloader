@@ -8,7 +8,7 @@ import traceback
 import yt_dlp
 
 APP_NAME = "MeyDownloader"
-VERSION = "1.2.3"
+VERSION = "1.2.4"
 OWNER = "Kamil"
 COPYRIGHT = "© 2026 Kamil. All rights reserved."
 IS_ANDROID = "ANDROID_ARGUMENT" in os.environ or "ANDROID_PRIVATE" in os.environ

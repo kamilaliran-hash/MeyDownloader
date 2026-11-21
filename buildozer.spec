@@ -4,9 +4,9 @@ package.name = meydownloader
 package.domain = com.meydownloader
 source.dir = app
 source.include_exts = py,png,jpg,kv
-version = 1.2.3
+version = 1.2.4
 
-requirements = python3,kivy==2.3.1,yt-dlp,yt-dlp-ejs,certifi,pyjnius,android,openssl
+requirements = python3,kivy==2.3.1,filetype,yt-dlp,yt-dlp-ejs,certifi,pyjnius,android,openssl
 
 icon.filename = assets/icon512.png
 presplash.filename = assets/presplash.png
