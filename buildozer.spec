@@ -28,6 +28,8 @@ android.manifest.intent_filters = android_intent_filters.xml
 # Static ffmpeg + QuickJS binaries packaged as "native libs" so Android lets us execute them
 android.add_libs_arm64_v8a = android_libs/arm64-v8a/*.so
 
+p4a.branch = v2024.01.21
+
 [buildozer]
 log_level = 2
 warn_on_root = 0
