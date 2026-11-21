@@ -4,7 +4,7 @@ package.name = meydownloader
 package.domain = com.meydownloader
 source.dir = app
 source.include_exts = py,png,jpg,kv
-version = 1.2.0
+version = 1.2.1
 
 requirements = python3,kivy==2.3.1,yt-dlp,yt-dlp-ejs,certifi,pyjnius,android,openssl
 
@@ -15,7 +15,7 @@ android.presplash_color = #110C1E
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,(name=android.permission.WRITE_EXTERNAL_STORAGE;maxSdkVersion=28),(name=android.permission.READ_EXTERNAL_STORAGE;maxSdkVersion=32)
 android.api = 34
 android.minapi = 24
 android.archs = arm64-v8a

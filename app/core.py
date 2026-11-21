@@ -8,7 +8,7 @@ import traceback
 import yt_dlp
 
 APP_NAME = "MeyDownloader"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 OWNER = "Kamil"
 COPYRIGHT = "© 2026 Kamil. All rights reserved."
 IS_ANDROID = "ANDROID_ARGUMENT" in os.environ or "ANDROID_PRIVATE" in os.environ
@@ -55,7 +55,7 @@ class _QuietLogger:
 
 def log_dir():
     if IS_ANDROID:
-        return default_download_dir()
+        return app_files_dir()
     d = os.path.join(os.path.expanduser("~"), APP_NAME)
     os.makedirs(d, exist_ok=True)
     return d
@@ -104,7 +104,7 @@ def _android_files_dir():
 def cookies_file_path():
     """Optional Netscape cookies.txt for private/login-only posts."""
     if IS_ANDROID:
-        return os.path.join(default_download_dir(), "cookies.txt")
+        return os.path.join(app_files_dir(), "cookies.txt")
     return os.path.join(os.path.expanduser("~"), APP_NAME, "cookies.txt")
 
 
@@ -149,17 +149,89 @@ def base_options(cookie_browser="None"):
 
 
 def default_download_dir():
+    """Desktop: ~/Downloads/MeyDownloader. Android: public Download/MeyDownloader
+    (shown to the user; files are written there by publish_android)."""
     if IS_ANDROID:
-        try:
-            from android.storage import primary_external_storage_path
-            base = os.path.join(primary_external_storage_path(), "Download")
-        except Exception:
-            base = "/storage/emulated/0/Download"
-    else:
-        base = os.path.join(os.path.expanduser("~"), "Downloads")
-    path = os.path.join(base, APP_NAME)
+        return "/storage/emulated/0/Download/" + APP_NAME
+    path = os.path.join(os.path.expanduser("~"), "Downloads", APP_NAME)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+# ---------------------------------------------------------------- Android storage
+def _activity():
+    from jnius import autoclass
+    return autoclass("org.kivy.android.PythonActivity").mActivity
+
+
+def android_sdk():
+    from jnius import autoclass
+    return autoclass("android.os.Build$VERSION").SDK_INT
+
+
+def app_files_dir():
+    """App-specific storage: always writable, no permission needed."""
+    try:
+        d = _activity().getExternalFilesDir(None)
+        if d is not None:
+            return d.getAbsolutePath()
+    except Exception:
+        pass
+    return _android_files_dir()
+
+
+def work_dir():
+    """Where yt-dlp downloads/converts on Android before publishing."""
+    d = os.path.join(app_files_dir(), "work")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+_MIME = {".mp3": "audio/mpeg", ".mp4": "video/mp4", ".m4a": "audio/mp4",
+         ".webm": "video/webm", ".mkv": "video/x-matroska"}
+
+
+def publish_android(path):
+    """Move a finished file into the phone's public Download/MeyDownloader folder.
+    Android 10+: via MediaStore (no permission needed). Android 9-: direct copy."""
+    name = os.path.basename(path)
+    mime = _MIME.get(os.path.splitext(name)[1].lower(), "application/octet-stream")
+    if android_sdk() >= 29:
+        from jnius import autoclass
+        Downloads = autoclass("android.provider.MediaStore$Downloads")
+        Cols = autoclass("android.provider.MediaStore$MediaColumns")
+        ContentValues = autoclass("android.content.ContentValues")
+        Integer = autoclass("java.lang.Integer")
+        resolver = _activity().getContentResolver()
+
+        cv = ContentValues()
+        cv.put(Cols.DISPLAY_NAME, name)
+        cv.put(Cols.MIME_TYPE, mime)
+        cv.put(Cols.RELATIVE_PATH, "Download/" + APP_NAME)
+        cv.put(Cols.IS_PENDING, Integer(1))
+        uri = resolver.insert(Downloads.EXTERNAL_CONTENT_URI, cv)
+        if uri is None:
+            raise RuntimeError("Android refused to create the file in Downloads.")
+        pfd = resolver.openFileDescriptor(uri, "w")
+        with os.fdopen(pfd.detachFd(), "wb") as out, open(path, "rb") as src:
+            shutil.copyfileobj(src, out, 1024 * 1024)
+        done = ContentValues()
+        done.put(Cols.IS_PENDING, Integer(0))
+        resolver.update(uri, done, None, None)
+        os.remove(path)
+        return "Download/" + APP_NAME + "/" + name
+
+    dest_dir = default_download_dir()
+    os.makedirs(dest_dir, exist_ok=True)
+    dest = os.path.join(dest_dir, name)
+    shutil.move(path, dest)
+    try:
+        from jnius import autoclass
+        autoclass("android.media.MediaScannerConnection").scanFile(
+            _activity(), [dest], None, None)
+    except Exception:
+        pass
+    return dest
 
 
 def _human(n):
@@ -179,7 +251,7 @@ def _friendly_error(e, url):
                               "rate-limit", "authentication", "not available")):
         hint = ("Pick your browser under 'Login cookies' (be logged in there)"
                 if not IS_ANDROID else
-                f"Put an exported cookies.txt in {default_download_dir()}")
+                f"Put an exported cookies.txt in {cookies_file_path()}")
         return f"{msg}\n\nThis post may need a login. {hint}."
     if "unsupported url" in low:
         return "This link isn't supported. Use a direct link to the video/post."

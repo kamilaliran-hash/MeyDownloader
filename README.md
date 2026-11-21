@@ -22,8 +22,8 @@ One Kivy codebase runs on Windows and Android.
 2. Open the **Actions** tab and wait for "Build MeyDownloader" to finish.
 3. Download the artifacts:
    - `windows`: `MeyDownloader.exe` (portable, single file) and `MeyDownloader-Setup.exe` (installer, recommended because it starts faster)
-   - `android`: `meydownloader-1.2.0-arm64-v8a-debug.apk`
-4. To publish a GitHub Release, run `git tag v1.2.0 && git push --tags`.
+   - `android`: `meydownloader-1.2.1-arm64-v8a-debug.apk`
+4. To publish a GitHub Release, run `git tag v1.2.1 && git push --tags`.
 
 ## Build locally
 - **Windows:** install Python 3.11 (64-bit) and Inno Setup 6, then run `windows\build_windows.bat`.
@@ -38,6 +38,11 @@ One Kivy codebase runs on Windows and Android.
 
 ## Logo
 The `assets/` folder holds `icon.png` (1024 px), `icon512.png`, `icon.ico` and `presplash.png`.
+
+## Android troubleshooting
+- If something goes wrong at start-up, the app now shows the error on screen with a **Copy error** button instead of closing.
+- Files are prepared in the app's private storage, then saved to **Download/MeyDownloader** through Android's MediaStore. That needs no storage permission on Android 10 and newer.
+- Logs and `cookies.txt` live in `Android/data/com.meydownloader.meydownloader/files/`.
 
 ## Notes
 - Sites change often. Rebuild every so often to pick up the latest yt-dlp.

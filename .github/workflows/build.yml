@@ -113,7 +113,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ffout
-          key: ffmpeg-android-${{ env.FFMPEG_FLAVOR }}-${{ hashFiles('tools/build_ffmpeg_slim.sh') }}
+          key: android-native-${{ env.FFMPEG_FLAVOR }}-${{ hashFiles('tools/build_ffmpeg_slim.sh', 'tools/build_qjs_android.sh') }}
       - name: ffmpeg (slim, built with the Android NDK)
         if: env.FFMPEG_FLAVOR == 'slim' && steps.ffcache.outputs.cache-hit != 'true'
         run: ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME tools/build_ffmpeg_slim.sh android ffout
@@ -123,13 +123,15 @@ jobs:
           mkdir -p ffout
           curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-arm64-static.tar.xz | tar -xJ
           cp ffmpeg-*-arm64-static/ffmpeg ffout/libffmpeg.so
+      - name: QuickJS (built with the Android NDK)
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        run: ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME tools/build_qjs_android.sh ffout
       - name: Native libs (ffmpeg + QuickJS)
         run: |
           mkdir -p android_libs/arm64-v8a
-          cp ffout/libffmpeg.so android_libs/arm64-v8a/
-          curl -fL https://github.com/quickjs-ng/quickjs/releases/latest/download/qjs-linux-aarch64 \
-            -o android_libs/arm64-v8a/libqjs.so || echo "::warning::QuickJS download failed"
+          cp ffout/libffmpeg.so ffout/libqjs.so android_libs/arm64-v8a/
           chmod +x android_libs/arm64-v8a/*.so
+          file android_libs/arm64-v8a/*.so
           ls -lh android_libs/arm64-v8a
       - uses: actions/cache@v4
         with:
