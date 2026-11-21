@@ -5,7 +5,10 @@
 set -euo pipefail
 OUT=$(realpath -m "$1"); mkdir -p "$OUT"
 WORK=$(mktemp -d); cd "$WORK"
-TAG=$(curl -fsSL https://api.github.com/repos/quickjs-ng/quickjs/releases/latest | grep -m1 '"tag_name"' | cut -d'"' -f4)
+# Resolve the latest tag from the releases/latest redirect (no API rate limit, no early-closing pipe)
+TAG=$(curl -fsSL -o /dev/null -w '%{url_effective}' https://github.com/quickjs-ng/quickjs/releases/latest)
+TAG=${TAG##*/}
+[ -n "$TAG" ] && [ "$TAG" != latest ] || { echo "Could not resolve QuickJS tag"; exit 1; }
 echo "QuickJS-ng $TAG"
 curl -fsSL "https://github.com/quickjs-ng/quickjs/archive/refs/tags/$TAG.tar.gz" | tar -xz
 cd quickjs-*
