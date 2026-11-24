@@ -134,13 +134,20 @@ BoxLayout:
         spacing: dp(8)
         Btn:
             id: cookie_import
-            text: "Import cookies.txt"
+            text: "Log in"
+            height: dp(42)
+            background_color: 0.15, 0.45, 0.85, 1
+            on_release: app.show_login_menu()
+        Btn:
+            text: "Import file"
+            size_hint_x: None
+            width: dp(100)
             height: dp(42)
             on_release: app.import_cookies()
         Btn:
-            text: "Clear"
+            text: "Log out"
             size_hint_x: None
-            width: dp(76)
+            width: dp(86)
             height: dp(42)
             on_release: app.clear_cookies()
 
@@ -222,13 +229,17 @@ BoxLayout:
         value: 0
         size_hint_y: None
         height: dp(18)
-    Label:
-        id: status
-        text: "Paste a link and tap Fetch info."
-        text_size: self.width, None
-        halign: "center"
-        color: 0.72, 0.7, 0.8, 1
-    Widget:
+    ScrollView:
+        do_scroll_x: False
+        Label:
+            id: status
+            text: "Paste a link and tap Fetch info."
+            text_size: self.width, None
+            size_hint_y: None
+            height: max(self.texture_size[1], dp(30))
+            halign: "center"
+            valign: "top"
+            color: 0.72, 0.7, 0.8, 1
     Label:
         text: app.footer
         size_hint_y: None
@@ -349,13 +360,57 @@ class MeyDownloaderApp(App):
 
     # ------------------------------------------------------------ cookies (Android)
     def _refresh_cookie_label(self):
-        self.ids.cookie_import.text = ("Cookies loaded (tap to replace)" if core.has_cookies_file()
-                                       else "Import cookies.txt")
+        sites = core.logged_in_sites()
+        self.ids.cookie_import.text = ("Logged in: " + ", ".join(sites)) if sites else "Log in"
 
     def clear_cookies(self):
         core.clear_cookies()
+        try:
+            import android_login
+            android_login.clear_webview_cookies()
+        except Exception:
+            pass
         self._refresh_cookie_label()
-        self.status("Login cookies removed.")
+        self.status("Logged out of all sites.")
+
+    def show_login_menu(self):
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.button import Button
+        from kivy.uix.label import Label
+        from kivy.uix.popup import Popup
+        box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        box.add_widget(Label(text="Log in so private, group and friends-only\n"
+                                  "videos can be downloaded. Your login stays\n"
+                                  "on this phone only.", halign="center",
+                             size_hint_y=None, height=dp(72)))
+        pop = Popup(title="Log in to...", content=box, size_hint=(0.9, None), height=dp(440))
+        for site in ("Facebook", "Instagram", "X / Twitter", "TikTok"):
+            b = Button(text=site, size_hint_y=None, height=dp(52))
+            b.bind(on_release=lambda _b, s=site: (pop.dismiss(), self.open_login(s)))
+            box.add_widget(b)
+        pop.open()
+
+    def open_login(self, site):
+        try:
+            import android_login
+            self.status(f"Log in to {site}, then tap 'Done' at the top.")
+            android_login.open_login(site, self._login_closed)
+        except Exception as e:
+            self.status(f"Cannot open login page: {e}")
+
+    def _login_closed(self, site):
+        # called on Android's UI thread
+        if not site:
+            return self._cookie_done("Login cancelled.")
+        try:
+            import android_login
+            domain, lines = android_login.collect_cookies(site)
+            if not lines:
+                return self._cookie_done(f"No {site} login found. Please log in, then tap Done.")
+            core.merge_cookie_lines(domain, lines)
+            self._cookie_done(f"Logged in to {site}. Tap Fetch info again.")
+        except Exception as e:
+            self._cookie_done(f"Saving login failed: {e}")
 
     def import_cookies(self):
         try:

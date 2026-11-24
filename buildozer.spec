@@ -4,7 +4,7 @@ package.name = meydownloader
 package.domain = com.meydownloader
 source.dir = app
 source.include_exts = py,png,jpg,kv
-version = 1.3.0
+version = 1.3.1
 
 requirements = python3,kivy==2.3.1,filetype,yt-dlp,yt-dlp-ejs,certifi,pyjnius,android,openssl
 

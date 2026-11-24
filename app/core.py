@@ -8,7 +8,7 @@ import traceback
 import yt_dlp
 
 APP_NAME = "MeyDownloader"
-VERSION = "1.3.0"
+VERSION = "1.3.1"
 OWNER = "Kamil"
 COPYRIGHT = "© 2026 Kamil. All rights reserved."
 IS_ANDROID = "ANDROID_ARGUMENT" in os.environ or "ANDROID_PRIVATE" in os.environ
@@ -119,6 +119,41 @@ def save_cookies_text(text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
+
+
+def merge_cookie_lines(domain, lines):
+    """Replace one site's cookies in cookies.txt, keeping the other sites'."""
+    path = cookies_file_path()
+    keep = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                if not line.split("\t", 1)[0].lstrip(".").endswith(domain.lstrip(".")):
+                    keep.append(line)
+    except FileNotFoundError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("# Netscape HTTP Cookie File\n" + "\n".join(keep + lines) + "\n")
+
+
+def logged_in_sites():
+    names = {"facebook.com": "Facebook", "instagram.com": "Instagram", "x.com": "X",
+             "twitter.com": "X", "tiktok.com": "TikTok", "youtube.com": "YouTube"}
+    found = []
+    try:
+        with open(cookies_file_path(), encoding="utf-8") as f:
+            for line in f:
+                dom = line.split("\t", 1)[0].lstrip(".")
+                for k, v in names.items():
+                    if dom.endswith(k) and v not in found:
+                        found.append(v)
+    except FileNotFoundError:
+        pass
+    return found
 
 
 def clear_cookies():
@@ -266,19 +301,22 @@ def _human(n):
 
 def _friendly_error(e, url):
     msg = re.sub(r"\x1b\[[0-9;]*m", "", str(e)).replace("ERROR: ", "")
-    msg = re.split(r";\s*please report this issue", msg)[0]
+    msg = re.split(r";\s*please report this issue|\.\s*(?:Check if this post|Use --cookies|"
+                   r"See https|Otherwise, if|Confirm you are)", msg)[0].strip()
+    msg = msg if msg.endswith(".") else msg + "."
     low = msg.lower()
     cookie_hint = ("pick your browser under 'Login cookies'" if not IS_ANDROID
-                   else "tap 'Import cookies.txt'")
+                   else "tap 'Log in' > Facebook")
     if "cannot parse data" in low or ("facebook" in low and "unable to extract" in low):
         return (f"{msg}\n\nFacebook didn't give us this video. Try:\n"
                 f"1) About > Update download engine, then restart the app\n"
                 f"2) If the video is private, in a group or friends-only: {cookie_hint}\n"
                 f"3) Open the video in Facebook > Share > Copy link, and paste that link")
     if any(k in low for k in ("login", "log in", "sign in", "cookies", "private",
-                              "rate-limit", "authentication", "not available")):
+                              "rate-limit", "authentication", "not available",
+                              "no video found")):
         hint = ("Pick your browser under 'Login cookies' (be logged in there)"
-                if not IS_ANDROID else "Tap 'Import cookies.txt' (exported while logged in)")
+                if not IS_ANDROID else "Tap 'Log in' and sign in to the site")
         return f"{msg}\n\nThis post may need a login. {hint}."
     if "unsupported url" in low:
         return "This link isn't supported. Use a direct link to the video/post."
