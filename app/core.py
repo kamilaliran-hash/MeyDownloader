@@ -8,7 +8,7 @@ import traceback
 import yt_dlp
 
 APP_NAME = "MeyDownloader"
-VERSION = "1.2.4"
+VERSION = "1.3.0"
 OWNER = "Kamil"
 COPYRIGHT = "© 2026 Kamil. All rights reserved."
 IS_ANDROID = "ANDROID_ARGUMENT" in os.environ or "ANDROID_PRIVATE" in os.environ
@@ -106,6 +106,26 @@ def cookies_file_path():
     if IS_ANDROID:
         return os.path.join(app_files_dir(), "cookies.txt")
     return os.path.join(os.path.expanduser("~"), APP_NAME, "cookies.txt")
+
+
+def has_cookies_file():
+    return os.path.isfile(cookies_file_path())
+
+
+def save_cookies_text(text):
+    if "\t" not in text and "Netscape" not in text:
+        raise ValueError("This doesn't look like a cookies.txt file (Netscape format).")
+    path = cookies_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def clear_cookies():
+    try:
+        os.remove(cookies_file_path())
+    except FileNotFoundError:
+        pass
 
 
 def base_options(cookie_browser="None"):
@@ -246,28 +266,78 @@ def _human(n):
 
 def _friendly_error(e, url):
     msg = re.sub(r"\x1b\[[0-9;]*m", "", str(e)).replace("ERROR: ", "")
+    msg = re.split(r";\s*please report this issue", msg)[0]
     low = msg.lower()
+    cookie_hint = ("pick your browser under 'Login cookies'" if not IS_ANDROID
+                   else "tap 'Import cookies.txt'")
+    if "cannot parse data" in low or ("facebook" in low and "unable to extract" in low):
+        return (f"{msg}\n\nFacebook didn't give us this video. Try:\n"
+                f"1) About > Update download engine, then restart the app\n"
+                f"2) If the video is private, in a group or friends-only: {cookie_hint}\n"
+                f"3) Open the video in Facebook > Share > Copy link, and paste that link")
     if any(k in low for k in ("login", "log in", "sign in", "cookies", "private",
                               "rate-limit", "authentication", "not available")):
         hint = ("Pick your browser under 'Login cookies' (be logged in there)"
-                if not IS_ANDROID else
-                f"Put an exported cookies.txt in {cookies_file_path()}")
+                if not IS_ANDROID else "Tap 'Import cookies.txt' (exported while logged in)")
         return f"{msg}\n\nThis post may need a login. {hint}."
     if "unsupported url" in low:
         return "This link isn't supported. Use a direct link to the video/post."
     return msg
 
 
+_UA = ("Mozilla/5.0 (Linux; Android 14; SM-A566B) AppleWebKit/537.36 "
+       "(KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36")
+
+
+def _resolve_redirect(url):
+    """Follow share-link redirects (facebook.com/share/..., fb.watch/...)."""
+    import urllib.request
+    try:
+        import ssl, certifi
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as r:
+            return r.geturl()
+    except Exception:
+        return None
+
+
+def _facebook_alternatives(url, error_text):
+    """Other forms of the same Facebook video that yt-dlp may parse better."""
+    cands = []
+    final = _resolve_redirect(url) if re.search(r"/share/|fb\.watch", url) else None
+    if final and "login" not in final and final != url:
+        cands.append(final.split("?")[0] if "watch" not in final else final)
+    ids = re.findall(r"(?:\[facebook\]\s*|v=|/videos/|/reel/|/watch/\?v=)(\d{8,})",
+                     f"{error_text} {url} {final or ''}")
+    for vid in dict.fromkeys(ids):
+        cands += [f"https://www.facebook.com/reel/{vid}",
+                  f"https://www.facebook.com/watch/?v={vid}",
+                  f"https://m.facebook.com/watch/?v={vid}"]
+    return [c for c in dict.fromkeys(cands) if c != url]
+
+
 # ---------------------------------------------------------------- API
 def fetch_info(url, cookie_browser="None"):
-    """Return dict: title, duration, site, resolutions[], has_video."""
+    """Return dict: title, duration, site, resolutions[], has_video, url."""
     opts = {**base_options(cookie_browser), "skip_download": True}
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
-    except Exception as e:
-        write_error_log(opts["logger"])
-        raise RuntimeError(_friendly_error(e, url)) from None
+    except Exception as first_error:
+        info = None
+        if "facebook" in url or "fb.watch" in url:
+            for alt in _facebook_alternatives(url, str(first_error)):
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        info = ydl.extract_info(alt, download=False)
+                    url = alt
+                    break
+                except Exception:
+                    continue
+        if info is None:
+            write_error_log(opts["logger"])
+            raise RuntimeError(_friendly_error(first_error, url)) from None
 
     if info.get("_type") == "playlist" and info.get("entries"):
         # e.g. multi-video X/Instagram posts: use the first item
@@ -297,7 +367,7 @@ def fetch_info(url, cookie_browser="None"):
         "site": info.get("extractor_key") or detect_platform(url),
         "resolutions": resolutions,
         "has_video": has_video or bool(best),
-        "url": info.get("webpage_url") or url,
+        "url": url,
     }
 
 

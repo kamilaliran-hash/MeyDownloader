@@ -13,6 +13,8 @@ from kivy.metrics import dp
 from kivy.base import ExceptionHandler, ExceptionManager
 
 import core
+import engine
+from kivy.properties import StringProperty
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -124,6 +126,23 @@ BoxLayout:
             values: app.cookie_browsers
             size_hint_x: None
             width: dp(120)
+
+    BoxLayout:
+        id: android_cookie_row
+        size_hint_y: None
+        height: dp(42)
+        spacing: dp(8)
+        Btn:
+            id: cookie_import
+            text: "Import cookies.txt"
+            height: dp(42)
+            on_release: app.import_cookies()
+        Btn:
+            text: "Clear"
+            size_hint_x: None
+            width: dp(76)
+            height: dp(42)
+            on_release: app.clear_cookies()
 
     Btn:
         id: fetch_btn
@@ -237,6 +256,27 @@ BoxLayout:
         text_size: self.width, None
         size_hint_y: None
         height: self.texture_size[1] + dp(8)
+    Label:
+        id: engine_lbl
+        text: app.engine_text
+        font_size: "12sp"
+        color: 0.55, 0.85, 1, 1
+        size_hint_y: None
+        height: dp(40)
+        text_size: self.width, None
+        halign: "center"
+    BoxLayout:
+        size_hint_y: None
+        height: dp(46)
+        spacing: dp(8)
+        Button:
+            text: "Update download engine"
+            on_release: app.update_engine(force=True)
+        Button:
+            text: "Reset"
+            size_hint_x: None
+            width: dp(80)
+            on_release: app.reset_engine()
     Widget:
 """
 
@@ -246,6 +286,7 @@ class MeyDownloaderApp(App):
     icon = os.path.join(HERE, "logo.png")
     logo = os.path.join(HERE, "logo.png")
     cookie_browsers = core.COOKIE_BROWSERS
+    engine_text = StringProperty("")
     footer = f"v{core.VERSION}  ·  Owner: {core.OWNER}  ·  © 2026 {core.OWNER}"
     about_text = (
         f"[size=22sp][b]MeyDownloader[/b][/size]\nVersion {core.VERSION}\n\n"
@@ -261,17 +302,23 @@ class MeyDownloaderApp(App):
             Window.size = (dp(540), dp(760))
         self.mode = "mp4"
         self.resolutions = []
+        self.resolved_url = None
+        self.engine_text = f"Download engine: yt-dlp {engine.current_version()}"
         root = Builder.load_string(KV)
         self.ids = root.ids
         ExceptionManager.add_handler(_KeepAlive(self))
         if core.IS_ANDROID:
             root.ids.folder.text = "Download/MeyDownloader  (phone storage)"
             root.ids.folder.readonly = True
-            for w in (root.ids.browse, root.ids.cookie_row):
-                w.opacity, w.disabled = 0, True
-            root.ids.cookie_row.height = 0
+            hide = (root.ids.browse, root.ids.cookie_row)
+            self._refresh_cookie_label()
         else:
             root.ids.folder.text = core.default_download_dir()
+            hide = (root.ids.android_cookie_row,)
+        for w in hide:
+            w.opacity, w.disabled = 0, True
+            if w is not root.ids.browse:
+                w.height = 0
         return root
 
     def on_start(self):
@@ -279,6 +326,75 @@ class MeyDownloaderApp(App):
         if core.IS_ANDROID:
             self._android_permissions()
             self._read_shared_link()
+        self.update_engine(force=False)   # silent daily check
+
+    # ------------------------------------------------------------ engine
+    def update_engine(self, force=True):
+        if force:
+            self.engine_text = "Checking for engine update..."
+        def work():
+            status, msg = engine.check_and_update(force=force)
+            if force or status == "updated":
+                self._engine_msg(msg or "No update needed.")
+        threading.Thread(target=work, daemon=True).start()
+
+    @mainthread
+    def _engine_msg(self, msg):
+        self.engine_text = msg
+        self.status(msg)
+
+    def reset_engine(self):
+        engine.reset()
+        self._engine_msg("Engine reset to built-in version. Restart the app.")
+
+    # ------------------------------------------------------------ cookies (Android)
+    def _refresh_cookie_label(self):
+        self.ids.cookie_import.text = ("Cookies loaded (tap to replace)" if core.has_cookies_file()
+                                       else "Import cookies.txt")
+
+    def clear_cookies(self):
+        core.clear_cookies()
+        self._refresh_cookie_label()
+        self.status("Login cookies removed.")
+
+    def import_cookies(self):
+        try:
+            from android import activity
+            from jnius import autoclass
+            Intent = autoclass("android.content.Intent")
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("*/*")
+            activity.bind(on_activity_result=self._on_cookie_file)
+            autoclass("org.kivy.android.PythonActivity").mActivity.startActivityForResult(
+                intent, 4242)
+        except Exception as e:
+            self.status(f"Cannot open file picker: {e}")
+
+    def _on_cookie_file(self, request, result, data):
+        if request != 4242:
+            return
+        try:
+            from android import activity
+            activity.unbind(on_activity_result=self._on_cookie_file)
+        except Exception:
+            pass
+        if result != -1 or data is None:     # -1 = RESULT_OK
+            return
+        try:
+            from jnius import autoclass
+            act = autoclass("org.kivy.android.PythonActivity").mActivity
+            pfd = act.getContentResolver().openFileDescriptor(data.getData(), "r")
+            with os.fdopen(pfd.detachFd(), "r", encoding="utf-8", errors="replace") as f:
+                core.save_cookies_text(f.read())
+            self._cookie_done("Cookies imported. Private/login-only posts should work now.")
+        except Exception as e:
+            self._cookie_done(f"Cookie import failed: {e}")
+
+    @mainthread
+    def _cookie_done(self, msg):
+        self._refresh_cookie_label()
+        self.status(msg)
 
     # ------------------------------------------------------------ helpers
     def _android_permissions(self):
@@ -323,6 +439,7 @@ class MeyDownloaderApp(App):
         self.ids.dl_btn.disabled = on or not self.resolutions
 
     def on_url(self, text):
+        self.resolved_url = None
         site = core.detect_platform(text.strip())
         self.ids.badge.text = f"Detected: {site}" if site else ""
         if self.resolutions:
@@ -361,7 +478,7 @@ class MeyDownloaderApp(App):
     def show_about(self):
         from kivy.uix.popup import Popup
         Popup(title="About", content=Builder.load_string(ABOUT),
-              size_hint=(0.9, None), height=dp(470),
+              size_hint=(0.92, None), height=dp(580),
               separator_color=(0.925, 0.282, 0.6, 1)).open()
 
     # ------------------------------------------------------------ actions
@@ -387,6 +504,7 @@ class MeyDownloaderApp(App):
     @mainthread
     def _fetched(self, info):
         self.resolutions = info["resolutions"]
+        self.resolved_url = info.get("url")
         dur = info["duration"]
         mins = f"  ({int(dur)//60}:{int(dur)%60:02d})" if dur else ""
         self.ids.title.text = f"[{info['site']}]  {info['title']}{mins}"
@@ -395,7 +513,7 @@ class MeyDownloaderApp(App):
         self.set_mode(self.mode)
 
     def start_download(self):
-        url = self.ids.url.text.strip()
+        url = self.resolved_url or self.ids.url.text.strip()
         folder = core.work_dir() if core.IS_ANDROID else self.ids.folder.text.strip()
         try:
             os.makedirs(folder, exist_ok=True)

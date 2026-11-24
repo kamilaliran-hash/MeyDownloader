@@ -180,6 +180,13 @@ def _start():
             pass
 
     try:
+        import engine
+        v = engine.install_override()
+        print(f"[MeyDownloader] engine: {'updated ' + v if v else 'built-in'}")
+    except Exception:
+        traceback.print_exc()
+
+    try:
         print("[MeyDownloader] importing UI")
         from ui import MeyDownloaderApp
         print("[MeyDownloader] starting app")

@@ -17,13 +17,22 @@ One Kivy codebase runs on Windows and Android.
   - Both platforms: put an exported `cookies.txt` (Netscape format) in `%USERPROFILE%\MeyDownloader\` on Windows, or in `Download/MeyDownloader/` on Android
 - **Android:** use the Share button in YouTube, Facebook, X, Instagram or TikTok, choose MeyDownloader, and the link is fetched automatically
 
+## Download engine updates (no rebuild needed)
+Sites like Facebook change their pages often. MeyDownloader checks for a new yt-dlp once a day and downloads it into its own storage. The update takes effect the next time you open the app.
+- To update by hand: **About → Update download engine**, then restart the app.
+- If an update misbehaves: **About → Reset** goes back to the version built into the app.
+
+## Facebook tips
+- If a link fails, the app automatically retries other forms of the same link (reel, watch and mobile versions).
+- Private, group or friends-only videos need login cookies. On Windows, pick your browser under "Login cookies". On Android, tap **Import cookies.txt** and choose a cookies.txt file you exported on a PC while logged in to Facebook (for example, with the "Get cookies.txt LOCALLY" browser extension).
+
 ## Get the builds (GitHub Actions)
 1. Push this folder to the `main` branch of a GitHub repo.
 2. Open the **Actions** tab and wait for "Build MeyDownloader" to finish.
 3. Download the artifacts:
    - `windows`: `MeyDownloader.exe` (portable, single file) and `MeyDownloader-Setup.exe` (installer, recommended because it starts faster)
-   - `android`: `meydownloader-1.2.4-arm64-v8a-debug.apk`
-4. To publish a GitHub Release, run `git tag v1.2.4 && git push --tags`.
+   - `android`: `meydownloader-1.3.0-arm64-v8a-debug.apk`
+4. To publish a GitHub Release, run `git tag v1.3.0 && git push --tags`.
 
 ## Build locally
 - **Windows:** install Python 3.11 (64-bit) and Inno Setup 6, then run `windows\build_windows.bat`.
