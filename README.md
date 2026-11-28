@@ -26,15 +26,15 @@ Sites like Facebook change their pages often. MeyDownloader checks for a new yt-
 - If a link fails, the app automatically retries other forms of the same link (reel, watch and mobile versions).
 - Private, group or friends-only videos need you to be logged in.
   - **Android:** tap **Log in**, choose Facebook (or Instagram, X or TikTok), sign in, then tap **Done** at the top. **Log out** removes the saved logins. **Import file** still accepts a cookies.txt file.
-  - **Windows:** pick the browser you're logged in with under "Login cookies".
+  - **Windows:** click **Log in** and choose a site. A small login window opens (it uses Microsoft Edge WebView2, which is built into Windows 10 and 11). Sign in, and the window closes by itself and saves the login. You can also pick a browser under "Or use cookies from browser".
 
 ## Get the builds (GitHub Actions)
 1. Push this folder to the `main` branch of a GitHub repo.
 2. Open the **Actions** tab and wait for "Build MeyDownloader" to finish.
 3. Download the artifacts:
    - `windows`: `MeyDownloader.exe` (portable, single file) and `MeyDownloader-Setup.exe` (installer, recommended because it starts faster)
-   - `android`: `meydownloader-1.3.1-arm64-v8a-debug.apk`
-4. To publish a GitHub Release, run `git tag v1.3.1 && git push --tags`.
+   - `android`: `meydownloader-1.4.0-arm64-v8a-debug.apk`
+4. To publish a GitHub Release, run `git tag v1.4.0 && git push --tags`.
 
 ## Build locally
 - **Windows:** install Python 3.11 (64-bit) and Inno Setup 6, then run `windows\build_windows.bat`.

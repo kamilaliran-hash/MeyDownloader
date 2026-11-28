@@ -205,4 +205,10 @@ def _start():
 
 
 if __name__ == "__main__":
+    os.environ.setdefault("KIVY_NO_ARGS", "1")
+    if len(sys.argv) >= 4 and sys.argv[1] == "--login":
+        # Windows login window (separate process, see desktop_login.py)
+        import desktop_login
+        desktop_login.run(sys.argv[2], sys.argv[3])
+        sys.exit(0)
     _start()

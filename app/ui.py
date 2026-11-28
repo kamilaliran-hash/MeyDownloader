@@ -118,7 +118,7 @@ BoxLayout:
         height: dp(42)
         spacing: dp(8)
         Lbl:
-            text: "Login cookies (private posts):"
+            text: "Or use cookies from browser:"
             height: dp(42)
         Spinner:
             id: cookies
@@ -322,10 +322,10 @@ class MeyDownloaderApp(App):
             root.ids.folder.text = "Download/MeyDownloader  (phone storage)"
             root.ids.folder.readonly = True
             hide = (root.ids.browse, root.ids.cookie_row)
-            self._refresh_cookie_label()
         else:
             root.ids.folder.text = core.default_download_dir()
-            hide = (root.ids.android_cookie_row,)
+            hide = ()
+        self._refresh_cookie_label()
         for w in hide:
             w.opacity, w.disabled = 0, True
             if w is not root.ids.browse:
@@ -366,8 +366,12 @@ class MeyDownloaderApp(App):
     def clear_cookies(self):
         core.clear_cookies()
         try:
-            import android_login
-            android_login.clear_webview_cookies()
+            if core.IS_ANDROID:
+                import android_login
+                android_login.clear_webview_cookies()
+            else:
+                import desktop_login
+                desktop_login.logout()
         except Exception:
             pass
         self._refresh_cookie_label()
@@ -383,6 +387,10 @@ class MeyDownloaderApp(App):
                                   "videos can be downloaded. Your login stays\n"
                                   "on this phone only.", halign="center",
                              size_hint_y=None, height=dp(72)))
+        if not core.IS_ANDROID:
+            box.children[0].text = ("Log in so private, group and friends-only\n"
+                                    "videos can be downloaded. Your login stays\n"
+                                    "on this PC only.")
         pop = Popup(title="Log in to...", content=box, size_hint=(0.9, None), height=dp(440))
         for site in ("Facebook", "Instagram", "X / Twitter", "TikTok"):
             b = Button(text=site, size_hint_y=None, height=dp(52))
@@ -391,12 +399,42 @@ class MeyDownloaderApp(App):
         pop.open()
 
     def open_login(self, site):
+        if not core.IS_ANDROID:
+            return self._desktop_login(site)
         try:
             import android_login
             self.status(f"Log in to {site}, then tap 'Done' at the top.")
             android_login.open_login(site, self._login_closed)
         except Exception as e:
             self.status(f"Cannot open login page: {e}")
+
+    def _desktop_login(self, site):
+        import subprocess
+        import tempfile
+        import desktop_login
+        self.status(f"A login window opened. Log in to {site} - it closes by itself when done.")
+
+        def work():
+            out = os.path.join(tempfile.gettempdir(), "meydownloader_login.json")
+            try:
+                if os.path.exists(out):
+                    os.remove(out)
+                subprocess.run(desktop_login.launch_command(site, out), timeout=1800)
+                import json
+                with open(out, encoding="utf-8") as f:
+                    res = json.load(f)
+                if not res.get("lines"):
+                    return self._cookie_done(f"No {site} login found. Try again.")
+                core.merge_cookie_lines(res["domain"], res["lines"])
+                os.remove(out)
+                msg = (f"Logged in to {site}. Tap Fetch info again." if res.get("ok") else
+                       f"Login window closed - saved what {site} gave us. Tap Fetch info.")
+                self._cookie_done(msg)
+            except FileNotFoundError:
+                self._cookie_done("Login window closed before logging in.")
+            except Exception as e:
+                self._cookie_done(f"Login failed: {e}")
+        threading.Thread(target=work, daemon=True).start()
 
     def _login_closed(self, site):
         # called on Android's UI thread
@@ -413,6 +451,21 @@ class MeyDownloaderApp(App):
             self._cookie_done(f"Saving login failed: {e}")
 
     def import_cookies(self):
+        if not core.IS_ANDROID:
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                r = tk.Tk(); r.withdraw()
+                path = filedialog.askopenfilename(title="Choose cookies.txt",
+                                                  filetypes=[("Cookies", "*.txt"), ("All", "*.*")])
+                r.destroy()
+                if path:
+                    with open(path, encoding="utf-8", errors="replace") as f:
+                        core.save_cookies_text(f.read())
+                    self._cookie_done("Cookies imported.")
+            except Exception as e:
+                self.status(f"Cookie import failed: {e}")
+            return
         try:
             from android import activity
             from jnius import autoclass
